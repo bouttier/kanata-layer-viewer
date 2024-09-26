@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools", "setuptools_scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kanata-overlay"
+description = "Show kanata layers."
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+classifiers = [
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+]
+authors = [{ name = "Élie Bouttier", email = "elie+kanata@bouttier.eu" }]
+dependencies = ["kalamine"]
+dynamic = ["version"]
+
+[project.scripts]
+"kanata-overlay" = "kanata_overlay:main"
