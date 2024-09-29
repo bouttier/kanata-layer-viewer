@@ -26,15 +26,10 @@ def send(driver, cmd, params={}):
 
 
 class KanataLayerRenderer:
-    def __init__(self, config_file, cache_dir=None):
+    def __init__(self, config_file, cache_dir):
         self.ctx = xkb.Context()
         self.keymap = self.ctx.keymap_new_from_names(layout="fr", variant="ergol")
-        if cache_dir is None:
-            if "XDG_CACHE_HOME" in environ:
-                cache_home = environ["XDG_CACHE_HOME"]
-            else:
-                cache_home = Path(environ.get("HOME", "~")) / ".cache"
-            cache_dir = cache_home / "kanata-layers"
+        cache_dir.mkdir(parents=True, exist_ok=True)
         self.cache_dir = cache_dir
         self.load_config(config_file)
 
