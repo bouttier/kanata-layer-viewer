@@ -9,10 +9,12 @@ from .client import KanataClient
 from .viewer import KanataLayerViewer
 
 
-async def init(kanata_config, cache_dir, hidden_layers, host, port):
+async def init(kanata_config, cache_dir, hidden_layers, host, port, layout, variant):
     renderer = KanataLayerRenderer(
         config_file=kanata_config,
         cache_dir=cache_dir,
+        layout=layout,
+        variant=variant,
     )
     viewer = KanataLayerViewer(renderer, hidden_layers=hidden_layers)
     client = KanataClient(renderer, viewer, params={"host": host, "port": port})
@@ -24,8 +26,8 @@ async def init(kanata_config, cache_dir, hidden_layers, host, port):
 
 
 def main():
-    parser = ArgumentParser(add_help=False, argument_default=SUPPRESS)
-    parser.add_argument("--config", type=FileType("rb"))
+    parser = ArgumentParser(add_help=False)
+    parser.add_argument("--config", type=FileType("rb"), default=SUPPRESS)
 
     args, remaining_args = parser.parse_known_args()
     config = None
@@ -61,6 +63,8 @@ def main():
         )
     else:
         parser.add_argument("--cache-dir", type=Path, required=True)
+    parser.add_argument("--layout")
+    parser.add_argument("--variant")
 
     if config is not None:
         defaults = tomllib.load(config)

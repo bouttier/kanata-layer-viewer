@@ -1,16 +1,17 @@
+from codecs import strict_errors
 import json
 import pkgutil
-from os import environ
 from xml.etree import ElementTree as ET
+from pyparsing import PositionToken
 from selenium import webdriver
 import tempfile
 from xkbcommon import xkb
-from pathlib import Path
 
 from .parser import KanataConfigParser
 from .constants import (
     CODE_ALIASES,
     ACTION_LABELS,
+    LAYER_LABELS,
     KEY_SCANCODES,
     KEY_SYM_LABELS,
     KEY_STRING_LABELS,
@@ -26,9 +27,9 @@ def send(driver, cmd, params={}):
 
 
 class KanataLayerRenderer:
-    def __init__(self, config_file, cache_dir):
+    def __init__(self, config_file, cache_dir, layout, variant):
         self.ctx = xkb.Context()
-        self.keymap = self.ctx.keymap_new_from_names(layout="fr", variant="ergol")
+        self.keymap = self.ctx.keymap_new_from_names(layout=layout, variant=variant)
         cache_dir.mkdir(parents=True, exist_ok=True)
         self.cache_dir = cache_dir
         self.load_config(config_file)
@@ -80,19 +81,17 @@ class KanataLayerRenderer:
         match action:
             case str(action) if action in ACTION_LABELS:
                 return ACTION_LABELS[action]
-            case str(action) if action.startswith("C-"):
-                return "^" + action.removeprefix("C-")
             case str(action) if action.startswith("🔣"):
                 return action.removeprefix("🔣")
             case ["layer-while-held" | "layer-switch", name]:
-                return f"⌨\n{name}"
-            case ["mwheel-left", x, y]:
+                return LAYER_LABELS.get(name, f"⌨{name}")
+            case ["mwheel-left", _, _]:
                 return "🖰 ←"
-            case ["mwheel-up", x, y]:
+            case ["mwheel-up", _, _]:
                 return "🖰 ↑"
-            case ["mwheel-down", x, y]:
+            case ["mwheel-down", _, _]:
                 return "🖰 ↓"
-            case ["mwheel-right", x, y]:
+            case ["mwheel-right", _, _]:
                 return "🖰 →"
 
     def resolve_action_alias(self, action):
@@ -145,82 +144,126 @@ class KanataLayerRenderer:
                 print(f"Warning: can not find key '{key_loc}'")
                 continue
 
-            def set_key_label(label, level):
-                if label is None:
-                    return
-                if key_loc in ["Backspace", "AltLeft", "AltRight"]:
-                    if level != 1:
-                        return
-                    level = None
-                # print("set", key_loc, label, level)
-                # this does not match multi-class elements: f'g/text[@class="level{lvl}"]'
-                # this is not supported by python: f'g/text[contains(@class,"level{lvl}")]'
-                for n in key.findall("g/text", ns):
-                    if level is not None:
-                        classes = n.attrib["class"].split(" ")
-                        if f"level{level}" not in classes:
-                            continue
-                    n.text = label
-                    break
-                else:
-                    for n in key.findall(".//text", ns):
-                        if level is not None:
-                            classes = n.attrib["class"].split(" ")
-                            if f"level{level}" not in classes:
-                                continue
-                        n.text = label
-                        break
-                    else:
-                        print(
-                            f"Warning: unable to set label '{label}' for key '{key_loc}' at level {level}"
-                        )
+            def set_key_action(action, pos_level=1, xkb_level=0, prefix="", suffix=""):
 
-            match action:
-                case "XX":
-                    pass
-                case action if (label := self.action_to_label(action)):
-                    set_key_label(label, level=1)
-                case str(mod) if mod.startswith("M-"):
-                    mod = mod.removeprefix("M-")
-                    set_key_label(
-                        "⌘" + (self.key_code_to_label(mod, level=0) or mod), level=1
+                if pos_level > 4:
+                    print(
+                        f"Warning: can not render action '{action}' at level {pos_level} on key {key_loc}"
                     )
-                case str(shift) if shift.startswith("S-"):
-                    shift = shift.removeprefix("S-")
-                    set_key_label(
-                        self.key_code_to_label(shift, level=1) or shift, level=1
-                    )
-                case str(altgr) if altgr.startswith("AG-"):
-                    altgr = altgr.removeprefix("AG-")
-                    set_key_label(
-                        self.key_code_to_label(altgr, level=2) or altgr, level=1
-                    )
-                    set_key_label(self.key_code_to_label(altgr, level=3), level=2)
-                case str(action):
-                    set_key_label(
-                        self.key_code_to_label(action, level=0) or action, level=1
-                    )
-                    set_key_label(self.key_code_to_label(action, level=1), level=2)
-                case [
-                    "tap-hold-press" | "tap-hold-release",
-                    tap_timeout,
-                    hold_timeout,
-                    tap_action,
-                    hold_action,
-                ]:
-                    for level, action in ((1, tap_action), (3, hold_action)):
-                        label = self.action_to_label(action)
-                        if label is not None:
-                            set_key_label(label, level=level)
+                    return
+
+                def set_key_label(
+                    label,
+                    pos_level=pos_level,
+                    xkb_level=xkb_level,
+                    prefix=prefix,
+                    suffix=suffix,
+                ):
+
+                    def set_key_text(text, level):
+                        if text is None:
+                            return
+                        text = prefix + text + suffix
+
+                        if key_loc in ["Backspace", "AltLeft", "AltRight"]:
+                            if level != 1:
+                                return
+                            level = None
+
+                        # this does not match multi-class elements: f'g/text[@class="level{lvl}"]'
+                        # this is not supported by python: f'g/text[contains(@class,"level{lvl}")]'
+                        for n in key.findall("g/text", ns):
+                            if level is not None:
+                                classes = n.attrib["class"].split(" ")
+                                if f"level{level}" not in classes:
+                                    continue
+                            n.text = text
+                            break
                         else:
-                            set_key_label(
-                                self.key_code_to_label(action, level=0), level=level
+                            for n in key.findall(".//text", ns):
+                                if level is not None:
+                                    classes = n.attrib["class"].split(" ")
+                                    if f"level{level}" not in classes:
+                                        continue
+                                n.text = text
+                                break
+                            else:
+                                print(
+                                    f"Warning: unable to set text '{text}' for key '{key_loc}' at level {level}"
+                                )
+
+                    match label:
+                        case "XX":
+                            pass
+                        case str(mod) if mod.startswith("M-"):
+                            mod = mod.removeprefix("M-")
+                            set_key_label(mod, prefix="⌘")
+                        case str(ctrl) if ctrl.startswith("C-"):
+                            ctrl = ctrl.removeprefix("C-")
+                            set_key_label(ctrl, prefix="^")
+                        case str(shift) if shift.startswith("S-"):
+                            shift = shift.removeprefix("S-")
+                            set_key_label(shift, xkb_level=xkb_level + 1)
+                        case str(altgr) if altgr.startswith("AG-"):
+                            altgr = altgr.removeprefix("AG-")
+                            set_key_label(altgr, xkb_level=xkb_level + 2)
+                        case str(action) if xkb_level is not None:
+                            set_key_text(
+                                self.key_code_to_label(action, level=xkb_level)
+                                or action,
+                                level=pos_level,
                             )
-                            set_key_label(
-                                self.key_code_to_label(action, level=1), level=level + 1
+                            if xkb_level % 2 == 0 and pos_level % 2 == 1:
+                                set_key_text(
+                                    self.key_code_to_label(action, level=xkb_level + 1),
+                                    level=pos_level + 1,
+                                )
+                        case str(action) if xkb_level is None:
+                            set_key_text(action, level=pos_level)
+
+                match action:
+                    case action if (label := self.action_to_label(action)):
+                        set_key_label(label, xkb_level=None)
+                    case str(label):
+                        set_key_label(label)
+                    case [
+                        "tap-hold-press" | "tap-hold-release",
+                        str(),
+                        str(),
+                        tap_action,
+                        hold_action,
+                    ]:
+                        set_key_action(tap_action, pos_level=pos_level)
+                        set_key_action(hold_action, pos_level=pos_level + 2)
+                    case [
+                        "fork",
+                        left_action,
+                        right_action,
+                        [*modifiers],
+                    ] if modifiers and set(modifiers) <= {"lsft", "rsft"}:
+                        assert pos_level % 2 == 1
+                        set_key_action(left_action, pos_level=pos_level)
+                        set_key_action(right_action, pos_level=pos_level + 1)
+                    case [
+                        "fork",
+                        left_action,
+                        right_action,
+                        [*modifiers],
+                    ] if modifiers and set(modifiers) <= {"lmet", "rmet"}:
+                        set_key_action(left_action, pos_level=pos_level)
+                        if pos_level % 2 == 1:
+                            set_key_action(
+                                right_action,
+                                pos_level=pos_level + 1,
+                                prefix=prefix + "[⌘] ",
                             )
-                case _:
-                    print(f"Warning: unknown action '{action}'")
+                    case [str(action), *_]:
+                        print(f"Warning: unknown action '{action}'")
+                        set_key_label(action, suffix=suffix + "*", xkb_level=None)
+                    case _:
+                        raise Exception(f"Unexpected action: '{action}'")
+
+            set_key_action(action)
 
         svg = ET.tostring(svg.getroot())
 

@@ -12,6 +12,15 @@ CODE_ALIASES = {
     "ralt": "AltRight",
 }
 
+LAYER_LABELS = {
+    "emojis": "😀",
+    "multimedia": "🔉",
+    "arrows": "⇒",
+    "funpad": "FN",
+    "navigation": "nav",
+    "numpad": "1₂³",
+}
+
 ACTION_LABELS = {
     "XX": "",
     "lalt": "⌥",
@@ -33,6 +42,9 @@ ACTION_LABELS = {
     "pgdn": "⇟",
     "bck": "⎗",
     "fwd": "⎘",
+    "power": "⏻",
+    "sleep": "⏾",
+    "menu": "☰",
     # "mbck": "🖯",
     # "mmid": "🖯3",
     # "mlft": "🖯",

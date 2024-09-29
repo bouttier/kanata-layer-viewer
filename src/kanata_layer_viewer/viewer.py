@@ -1,6 +1,6 @@
 import subprocess
 from i3ipc.aio import Connection
-from i3ipc import Event
+from i3ipc import Event, WindowEvent
 
 
 class KanataLayerViewer:
@@ -10,7 +10,7 @@ class KanataLayerViewer:
         self.hidden_layers = hidden_layers
 
     async def run(self):
-        async def on_output(conn, event):
+        async def on_output(conn: Connection, event: WindowEvent) -> None:
             tree = await conn.get_tree()
             focused = tree.find_by_id(event.container.id)
             if not focused:
@@ -25,7 +25,7 @@ class KanataLayerViewer:
                 await layer.command("move container to output right")
                 await self.set_position(layer)
 
-        async def on_new_window(conn, event):
+        async def on_new_window(conn: Connection, event: WindowEvent) -> None:
             if event.container.app_id == "kanata-layer-viewer":
                 await self.set_position(event.container)
 
@@ -54,12 +54,18 @@ class KanataLayerViewer:
         self.process = subprocess.Popen(
             [
                 "swayimg",
-                "--config", "viewer.transparency=#00000080",
-                "--config", "general.app_id=kanata-layer-viewer",
-                "--config", "viewer.scale=fit",
-                "--config", "list.recursive=yes",
-                "--config", "info.show=no",
-                "--config", "general.size=1080,720",
+                "--config",
+                "viewer.transparency=#00000080",
+                "--config",
+                "general.app_id=kanata-layer-viewer",
+                "--config",
+                "viewer.scale=fit",
+                "--config",
+                "list.recursive=yes",
+                "--config",
+                "info.show=no",
+                "--config",
+                "general.size=1080,720",
                 self.renderer.get_rendered_layer_path(name),
             ],
         )
