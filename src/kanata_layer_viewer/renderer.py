@@ -1,8 +1,6 @@
-from codecs import strict_errors
 import json
 import pkgutil
 from xml.etree import ElementTree as ET
-from pyparsing import PositionToken
 from selenium import webdriver
 import tempfile
 from xkbcommon import xkb
@@ -227,7 +225,7 @@ class KanataLayerRenderer:
                     case str(label):
                         set_key_label(label)
                     case [
-                        "tap-hold-press" | "tap-hold-release",
+                        "tap-hold" | "tap-hold-press" | "tap-hold-release",
                         str(),
                         str(),
                         tap_action,
